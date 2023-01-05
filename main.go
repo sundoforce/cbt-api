@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-pg/pg"
+	"github.com/joho/godotenv"
 )
 
 type Quiz struct {
@@ -24,10 +27,16 @@ type Quiz struct {
 func main() {
 	router := gin.Default()
 
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	db := pg.Connect(&pg.Options{
-		User:     "postgres",
-		Password: "mypassword",
-		Database: "mydatabase",
+		User:     os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PASSWORD"),
+		Database: os.Getenv("DB_DATABASE"),
 	})
 	defer db.Close()
 
