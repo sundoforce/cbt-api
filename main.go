@@ -2,53 +2,60 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"log"
 	"os"
 
-	"github.com/gin-gonic/gin"
 	"github.com/go-pg/pg"
-	"github.com/joho/godotenv"
 )
 
 type Quiz struct {
-	ID            int64  `json:"id"`
-	Title         string `json:"title"`
-	Description   string `json:"description"`
-	PassageA      string `json:"passage_a"`
-	PassageB      string `json:"passage_b"`
-	PassageC      string `json:"passage_c"`
-	PassageD      string `json:"passage_d"`
-	PassageE      string `json:"passage_e"`
-	PassageF      string `json:"passage_f"`
-	Answer        string `json:"answer"`
-	AnswerChoices string `json:"answer_choices"`
+	ID            int
+	PassageA      string
+	PassageB      string
+	PassageC      string
+	PassageD      string
+	PassageE      string
+	PassageF      string
+	Answer        string
+	AnswerChoices string
 }
 
 func main() {
-	router := gin.Default()
-
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
 	db := pg.Connect(&pg.Options{
 		User:     os.Getenv("DB_USER"),
 		Password: os.Getenv("DB_PASSWORD"),
 		Database: os.Getenv("DB_DATABASE"),
+		Addr:     os.Getenv("DB_HOST") + ":" + os.Getenv("DB_PORT"),
 	})
 	defer db.Close()
 
+	router := gin.Default()
+
 	router.GET("/api/quiz", func(c *gin.Context) {
-		var quiz []Quiz
-		err := db.Model(&quiz).Select()
+		var quizzes []Quiz
+		err := db.Model(&quizzes).Select()
 		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
+			c.AbortWithStatus(http.StatusInternalServerError)
+			fmt.Println(err)
+		} else {
+			c.JSON(http.StatusOK, quizzes)
 		}
-		c.JSON(http.StatusOK, quiz)
 	})
 
-	router.Run()
+	router.GET("/api/quiz/:id", func(c *gin.Context) {
+		var quiz Quiz
+		quizID := c.Params.ByName("id")
+		err := db.Model(&quiz).Where("id = ?", quizID).Select()
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			fmt.Println(err)
+		} else {
+			c.JSON(http.StatusOK, quiz)
+		}
+	})
+
+	err := router.Run(":" + os.Getenv("API_PORT"))
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
