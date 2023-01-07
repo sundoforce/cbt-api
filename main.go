@@ -3,8 +3,10 @@ package main
 import (
     "fmt"
     "log"
+    "math/rand"
     "net/http"
     "os"
+    "strconv"
 
     "github.com/gin-gonic/gin"
     "github.com/jinzhu/gorm"
@@ -49,11 +51,74 @@ func GetQuiz(c *gin.Context) {
     }
 }
 
+func GetRandomQuizze(c *gin.Context) {
+    start, err := strconv.Atoi(c.Params.ByName("start"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    end, err := strconv.Atoi(c.Params.ByName("end"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    randomIndex := rand.Intn(end-start+1) + start
+    var quiz Quiz
+    if err := db.Where("id = ?", randomIndex).First(&quiz).Error; err != nil {
+        c.AbortWithStatus(http.StatusInternalServerError)
+        return
+    }
+    c.JSON(http.StatusOK, quiz)
+}
+
+func GetRandomQuizzes(c *gin.Context) {
+     start, err := strconv.Atoi(c.Params.ByName("start"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    end, err := strconv.Atoi(c.Params.ByName("end"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    var quizzes []Quiz
+    if err := db.Where("id BETWEEN ? AND ?", start, end).Order("random()").Find(&quizzes).Error; err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+    c.JSON(http.StatusOK, quizzes)
+}
+
+func connectDB() *gorm.DB {
+    err := godotenv.Load()
+    if err != nil {
+        log.Fatal("Error loading .env file")
+    }
+    // Retrieve the database connection details from environment variables
+    host := os.Getenv("POSTGRES_HOST")
+    user := os.Getenv("POSTGRES_USER")
+    password := os.Getenv("POSTGRES_PASSWORD")
+    dbname := os.Getenv("POSTGRES_DBNAME")
+
+    // Build the connection string
+    connStr := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", host, user, password, dbname)
+
+    // Connect to the database
+    db, err := gorm.Open("postgres", connStr)
+    if err != nil {
+        log.Fatal(err)
+    }
+    // Set some gorm options
+    db.LogMode(true)
+    db.SingularTable(true)
+    return db
+}
+
 func main() {
     fmt.Printf("hello, world\n")
     router := gin.Default()
 
-    // Load the environment variables from the .env file
     err := godotenv.Load()
     if err != nil {
         log.Fatal("Error loading .env file")
@@ -77,6 +142,8 @@ func main() {
     // Set some gorm options
     db.LogMode(true)
     db.SingularTable(true)
+//    db := connectDB()
+//    defer db.Close()
 
     router.GET("/", func(c *gin.Context) {
         c.String(200, "Hello, World!")
@@ -86,6 +153,8 @@ func main() {
     {
         v1.GET("/quiz", GetQuizzes)
         v1.GET("/quiz/:id", GetQuiz)
+        v1.GET("/quiz/randoms/:start/:end", GetRandomQuizzes)
+        v1.GET("/quiz/random/:start/:end", GetRandomQuizze)
     }
 
 	// Start the server on port 8080
