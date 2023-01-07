@@ -1,120 +1,163 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-	"os"
+    "fmt"
+    "log"
+    "math/rand"
+    "net/http"
+    "os"
+    "strconv"
 
-	//	"log"
-	//	"os"
-	"github.com/gin-gonic/gin"
-	"github.com/go-pg/pg"
+    "github.com/gin-gonic/gin"
+    "github.com/jinzhu/gorm"
+    _ "github.com/jinzhu/gorm/dialects/postgres"
+    "github.com/joho/godotenv"
 )
 
 type Quiz struct {
-	ID            int
-	PassageA      string
-	PassageB      string
-	PassageC      string
-	PassageD      string
-	PassageE      string
-	PassageF      string
-	Answer        string
-	AnswerChoices string
+    ID               int    `json:"id"`
+    Title            string `json:"title"`
+    PassageA         string `json:"passage_a"`
+    PassageB         string `json:"passage_b"`
+    PassageC         string `json:"passage_c"`
+    PassageD         string `json:"passage_d"`
+    PassageE         string `json:"passage_e"`
+    PassageF         string `json:"passage_f"`
+    Answer           string `json:"answer"`
+    AnswerCandidates string `json:"answer_candidates"`
+    Description      string `json:"description"`
+}
+
+var db *gorm.DB
+
+func GetQuizzes(c *gin.Context) {
+    var quizzes []Quiz
+    if err := db.Find(&quizzes).Error; err != nil {
+        c.AbortWithStatus(http.StatusInternalServerError)
+        fmt.Println(err)
+    } else {
+        c.JSON(http.StatusOK, quizzes)
+    }
+}
+
+func GetQuiz(c *gin.Context) {
+    var quiz Quiz
+    quizID := c.Params.ByName("id")
+    if err := db.Where("id = ?", quizID).First(&quiz).Error; err != nil {
+        c.AbortWithStatus(http.StatusNotFound)
+        fmt.Println(err)
+    } else {
+        c.JSON(http.StatusOK, quiz)
+    }
+}
+
+func GetRandomQuizze(c *gin.Context) {
+    start, err := strconv.Atoi(c.Params.ByName("start"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    end, err := strconv.Atoi(c.Params.ByName("end"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    randomIndex := rand.Intn(end-start+1) + start
+    var quiz Quiz
+    if err := db.Where("id = ?", randomIndex).First(&quiz).Error; err != nil {
+        c.AbortWithStatus(http.StatusInternalServerError)
+        return
+    }
+    c.JSON(http.StatusOK, quiz)
+}
+
+func GetRandomQuizzes(c *gin.Context) {
+     start, err := strconv.Atoi(c.Params.ByName("start"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    end, err := strconv.Atoi(c.Params.ByName("end"))
+    if err != nil {
+        c.AbortWithStatus(http.StatusBadRequest)
+        return
+    }
+    var quizzes []Quiz
+    if err := db.Where("id BETWEEN ? AND ?", start, end).Order("random()").Find(&quizzes).Error; err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+    c.JSON(http.StatusOK, quizzes)
+}
+
+func connectDB() *gorm.DB {
+    err := godotenv.Load()
+    if err != nil {
+        log.Fatal("Error loading .env file")
+    }
+    // Retrieve the database connection details from environment variables
+    host := os.Getenv("POSTGRES_HOST")
+    user := os.Getenv("POSTGRES_USER")
+    password := os.Getenv("POSTGRES_PASSWORD")
+    dbname := os.Getenv("POSTGRES_DBNAME")
+
+    // Build the connection string
+    connStr := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", host, user, password, dbname)
+
+    // Connect to the database
+    db, err := gorm.Open("postgres", connStr)
+    if err != nil {
+        log.Fatal(err)
+    }
+    // Set some gorm options
+    db.LogMode(true)
+    db.SingularTable(true)
+    return db
 }
 
 func main() {
-	fmt.Printf("hello, world\n")
+    fmt.Printf("hello, world\n")
+    router := gin.Default()
 
-	db := pg.Connect(&pg.Options{
-		User:     os.Getenv("DB_USER"),
-		Password: os.Getenv("DB_PASSWORD"),
-		Database: os.Getenv("DB_DATABASE"),
-		Addr:     os.Getenv("DB_HOST") + ":" + os.Getenv("DB_PORT"),
-	})
-	defer db.Close()
+    err := godotenv.Load()
+    if err != nil {
+        log.Fatal("Error loading .env file")
+    }
+    // Retrieve the database connection details from environment variables
+    host := os.Getenv("POSTGRES_HOST")
+    user := os.Getenv("POSTGRES_USER")
+    password := os.Getenv("POSTGRES_PASSWORD")
+    dbname := os.Getenv("POSTGRES_DBNAME")
 
-	router := gin.Default()
+    // Build the connection string
+    connStr := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", host, user, password, dbname)
 
-	router.GET("/api/quiz", func(c *gin.Context) {
-		var quizzes []Quiz
-		err := db.Model(&quizzes).Select()
-		if err != nil {
-			c.AbortWithStatus(http.StatusInternalServerError)
-			fmt.Println(err)
-		} else {
-			c.JSON(http.StatusOK, quizzes)
-		}
-	})
-	//
-	//	router.GET("/api/quiz/:id", func(c *gin.Context) {
-	//		var quiz Quiz
-	//		quizID := c.Params.ByName("id")
-	//		err := db.Model(&quiz).Where("id = ?", quizID).Select()
-	//		if err != nil {
-	//			c.AbortWithStatus(http.StatusInternalServerError)
-	//			fmt.Println(err)
-	//		} else {
-	//			c.JSON(http.StatusOK, quiz)
-	//		}
-	//	})
-	//
-	//	err := router.Run(":" + os.Getenv("API_PORT"))
-	//	if err != nil {
-	//		log.Fatalln(err)
-	//	}
+    // Connect to the database
+    db, err = gorm.Open("postgres", connStr)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer db.Close()
 
-	//	router.POST("/api/:table/:id", func(c *gin.Context) {
-	//		var quiz Quiz
-	//		table := c.Params.ByName("table")
-	//		id := c.Params.ByName("id")
-	//		if err := c.BindJSON(&quiz); err != nil {
-	//			c.AbortWithStatus(http.StatusBadRequest)
-	//			fmt.Println(err)
-	//			return
-	//		}
-	//		_, err := db.Model(&quiz).Where("id = ?", id).Update()
-	//		if err != nil {
-	//			c.AbortWithStatus(http.StatusInternalServerError)
-	//			fmt.Println(err)
-	//		} else {
-	//			c.JSON(http.StatusOK, gin.H{"id #" + id: "updated"})
-	//		}
-	//	})
-	//
-	//	router.GET("/api/:table/random/:start/:end", func(c *gin.Context) {
-	//		tableName := c.Params.ByName("table")
-	//		start, _ := strconv.Atoi(c.Params.ByName("start"))
-	//		end, _ := strconv.Atoi(c.Params.ByName("end"))
-	//
-	//		// 입력받은 tableName과 column 이름을 이용해서 SELECT 쿼리 생성
-	//		query := fmt.Sprintf("SELECT * FROM %s WHERE id BETWEEN %d AND %d ORDER BY random()", tableName, start, end)
-	//
-	//		// db.Query() 함수를 이용해서 쿼리 수행
-	//		_, err := db.Query(query)
-	//		if err != nil {
-	//			c.AbortWithStatus(http.StatusInternalServerError)
-	//			fmt.Println(err)
-	//		} else {
-	//			c.JSON(http.StatusOK, gin.H{"message": "success"})
-	//		}
-	//	})
-	//
-	//	router.GET("/api/:table/:start/:end", func(c *gin.Context) {
-	//		tableName := c.Params.ByName("table")
-	//		start, _ := strconv.Atoi(c.Params.ByName("start"))
-	//		end, _ := strconv.Atoi(c.Params.ByName("end"))
-	//
-	//		// Create a slice of structs with the same type as the table
-	//		var records []struct{}
-	//
-	//		// Use ORM to execute the SELECT query
-	//		err := db.Model(&records).Where("id BETWEEN ? AND ?", start, end).Order("random()").Select()
-	//		if err != nil {
-	//			c.AbortWithStatus(http.StatusInternalServerError)
-	//			fmt.Println(err)
-	//		} else {
-	//			c.JSON(http.StatusOK, gin.H{"records": records})
-	//		}
-	//	})
+    // Set some gorm options
+    db.LogMode(true)
+    db.SingularTable(true)
+//    db := connectDB()
+//    defer db.Close()
+
+    router.GET("/", func(c *gin.Context) {
+        c.String(200, "Hello, World!")
+    })
+
+    v1 := router.Group("/api")
+    {
+        v1.GET("/quiz", GetQuizzes)
+        v1.GET("/quiz/:id", GetQuiz)
+        v1.GET("/quiz/randoms/:start/:end", GetRandomQuizzes)
+        v1.GET("/quiz/random/:start/:end", GetRandomQuizze)
+    }
+
+	// Start the server on port 8080
+	router.Run(":8080")
 }
+
